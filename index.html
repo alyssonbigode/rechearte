@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#6d3526" />
+    <title>Rechearte Controle</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <img class="brand-logo" src="./assets/logo.jpeg" alt="Logo Rechearte" />
+          <div>
+            <strong>Rechearte</strong>
+            <span>Controle alfa</span>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="Navegacao principal">
+          <button class="nav-item active" data-view="dashboard" type="button">
+            <span data-icon="home"></span>
+            Inicio
+          </button>
+          <button class="nav-item" data-view="sales" type="button">
+            <span data-icon="receipt"></span>
+            Vendas
+          </button>
+          <button class="nav-item" data-view="debtors" type="button">
+            <span data-icon="wallet"></span>
+            Devedores
+          </button>
+          <button class="nav-item" data-view="products" type="button">
+            <span data-icon="package"></span>
+            Produtos
+          </button>
+          <button class="nav-item" data-view="production" type="button">
+            <span data-icon="boxes"></span>
+            Producao
+          </button>
+          <button class="nav-item" data-view="customers" type="button">
+            <span data-icon="users"></span>
+            Clientes
+          </button>
+          <button class="nav-item" data-view="stock" type="button">
+            <span data-icon="boxes"></span>
+            Estoque
+          </button>
+          <button class="nav-item" data-view="reports" type="button">
+            <span data-icon="chart"></span>
+            Relatorios
+          </button>
+        </nav>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">@rechearte_doces</p>
+            <h1 id="page-title">Inicio</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" id="undo-change" title="Voltar uma alteracao" type="button">
+              <span data-icon="undo"></span>
+            </button>
+          </div>
+        </header>
+
+        <section class="view active" id="dashboard-view">
+          <div class="metrics-grid">
+            <article class="metric">
+              <span data-icon="coins"></span>
+              <p>Vendido hoje</p>
+              <strong id="metric-today">R$ 0,00</strong>
+            </article>
+            <article class="metric">
+              <span data-icon="shopping-bag"></span>
+              <p>Vendas no mes</p>
+              <strong id="metric-month">0</strong>
+            </article>
+            <article class="metric">
+              <span data-icon="alert-triangle"></span>
+              <p>Sem estoque</p>
+              <strong id="metric-low-stock">0</strong>
+            </article>
+            <article class="metric">
+              <span data-icon="heart-handshake"></span>
+              <p>Clientes</p>
+              <strong id="metric-customers">0</strong>
+            </article>
+          </div>
+
+          <div class="dashboard-layout">
+            <section class="panel quick-sale-panel">
+              <div class="section-title">
+                <div>
+                  <p class="eyebrow">Venda rapida</p>
+                  <h2>Lancar pedido</h2>
+                </div>
+                <span class="pill">Pix, dinheiro ou cartao</span>
+              </div>
+              <form id="sale-form" class="form-grid">
+                <label>
+                  Cliente
+                  <select id="sale-customer"></select>
+                </label>
+                <label class="wide">
+                  Produto
+                  <select id="sale-product"></select>
+                </label>
+                <label>
+                  Quantidade
+                  <input id="sale-qty" min="1" step="1" type="number" value="1" />
+                </label>
+                <button class="ghost-action sale-add-button" id="add-sale-item" type="button">
+                  <span data-icon="plus"></span>
+                  Adicionar item
+                </button>
+                <div class="sale-items wide" id="sale-items"></div>
+                <div class="sale-total wide">
+                  <span>Total da compra</span>
+                  <strong id="sale-total">R$ 0,00</strong>
+                </div>
+                <label>
+                  Pagamento
+                  <select id="sale-payment">
+                    <option>Pix</option>
+                    <option>Dinheiro</option>
+                    <option>Cartao</option>
+                    <option>Pendente</option>
+                  </select>
+                </label>
+                <label class="wide">
+                  Observacao
+                  <input id="sale-note" placeholder="Ex: retirar as 17h" type="text" />
+                </label>
+                <button class="primary-action wide" type="submit">
+                  <span data-icon="plus"></span>
+                  Registrar venda
+                </button>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="section-title">
+              <div>
+                <p class="eyebrow">Agora</p>
+                  <h2>Alertas de estoque</h2>
+                </div>
+              </div>
+              <div id="low-stock-list" class="list"></div>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Ultimos movimentos</p>
+                <h2>Vendas recentes</h2>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Cliente</th>
+                    <th>Itens</th>
+                    <th>Pagamento</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-sales"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="sales-view">
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Historico</p>
+                <h2>Todas as vendas</h2>
+              </div>
+            </div>
+            <div id="sales-history" class="timeline"></div>
+          </section>
+        </section>
+
+        <section class="view" id="debtors-view">
+          <div class="metrics-grid report-metrics">
+            <article class="metric">
+              <span data-icon="wallet"></span>
+              <p>Total pendente</p>
+              <strong id="debt-total">R$ 0,00</strong>
+            </article>
+            <article class="metric">
+              <span data-icon="receipt"></span>
+              <p>Vendas pendentes</p>
+              <strong id="debt-sales-count">0</strong>
+            </article>
+            <article class="metric">
+              <span data-icon="heart-handshake"></span>
+              <p>Clientes devendo</p>
+              <strong id="debt-customers-count">0</strong>
+            </article>
+            <article class="metric">
+              <span data-icon="shopping-bag"></span>
+              <p>Itens pendentes</p>
+              <strong id="debt-items-count">0</strong>
+            </article>
+          </div>
+
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Pendencias</p>
+                <h2>Clientes devedores</h2>
+              </div>
+            </div>
+            <div id="debtors-list" class="timeline"></div>
+          </section>
+        </section>
+
+        <section class="view" id="products-view">
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Cardapio</p>
+                <h2>Produtos</h2>
+              </div>
+            </div>
+            <form id="product-form" class="form-grid">
+              <input id="product-id" type="hidden" />
+              <label>
+                Nome
+                <input id="product-name" required type="text" />
+              </label>
+              <label>
+                Categoria
+                <input id="product-category" placeholder="Cone trufado" required type="text" />
+              </label>
+              <label>
+                Preco
+                <input id="product-price" data-money-input inputmode="numeric" required type="text" />
+              </label>
+              <label>
+                Custo inicial
+                <input id="product-cost" data-money-input inputmode="numeric" placeholder="Opcional, a receita calcula depois" type="text" />
+              </label>
+              <label>
+                Estoque
+                <input id="product-stock" min="0" step="1" required type="number" />
+              </label>
+              <button class="primary-action" type="submit">
+                <span data-icon="save"></span>
+                Salvar produto
+              </button>
+            </form>
+            <div id="products-list" class="cards-grid"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Receita</p>
+                <h2>Calculadora de custo</h2>
+              </div>
+              <button class="ghost-action" id="add-ingredient-row" type="button">
+                <span data-icon="plus"></span>
+                Ingrediente
+              </button>
+            </div>
+
+            <div class="form-grid">
+              <label>
+                Nome da receita
+                <input id="recipe-name" placeholder="Cone trufado" type="text" />
+              </label>
+              <label>
+                Rendimento
+                <input id="recipe-yield" min="1" step="1" type="number" value="1" />
+              </label>
+              <label>
+                Aplicar custo em
+                <select id="recipe-product"></select>
+              </label>
+              <button class="primary-action" id="apply-recipe-cost" type="button">
+                <span data-icon="save"></span>
+                Usar custo no produto
+              </button>
+            </div>
+
+            <div class="table-wrap">
+              <table class="cost-table">
+                <thead>
+                  <tr>
+                    <th>Insumo cadastrado</th>
+                    <th>Custo cadastrado</th>
+                    <th>Qtd. usada</th>
+                    <th>Un.</th>
+                    <th>Custo usado</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="ingredient-rows"></tbody>
+              </table>
+            </div>
+
+            <div class="cost-summary">
+              <div>
+                <span>Custo da receita</span>
+                <strong id="recipe-total-cost">R$ 0,00</strong>
+              </div>
+              <div>
+                <span>Custo por unidade</span>
+                <strong id="recipe-unit-cost">R$ 0,00</strong>
+              </div>
+            </div>
+
+            <div class="calculator-actions">
+              <button class="primary-action" id="save-recipe-history" type="button">
+                <span data-icon="save"></span>
+                Salvar receita no historico
+              </button>
+              <button class="ghost-action" id="clear-recipe" type="button">
+                <span data-icon="trash"></span>
+                Apagar receita
+              </button>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Arquivo</p>
+                <h2>Historico de receitas</h2>
+              </div>
+            </div>
+            <div id="recipe-history-list" class="timeline"></div>
+          </section>
+        </section>
+
+        <section class="view" id="production-view">
+          <div class="metrics-grid report-metrics">
+            <article class="metric">
+              <span data-icon="boxes"></span>
+              <p>Insumos cadastrados</p>
+              <strong id="metric-consumables">0</strong>
+            </article>
+            <article class="metric">
+              <span data-icon="alert-triangle"></span>
+              <p>Insumos em alerta</p>
+              <strong id="metric-consumable-alerts">0</strong>
+            </article>
+            <article class="metric">
+              <span data-icon="package"></span>
+              <p>Receitas ativas</p>
+              <strong id="metric-active-recipes">0</strong>
+            </article>
+            <article class="metric">
+              <span data-icon="shopping-bag"></span>
+              <p>Produzido no mes</p>
+              <strong id="metric-produced-month">0</strong>
+            </article>
+          </div>
+
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Compras</p>
+                <h2>Insumos e embalagens</h2>
+              </div>
+            </div>
+            <form id="consumable-form" class="form-grid">
+              <input id="consumable-id" type="hidden" />
+              <label>
+                Codigo
+                <input id="consumable-code" placeholder="1000" required type="text" />
+              </label>
+              <label>
+                Nome
+                <input id="consumable-name" placeholder="Chocolate fracionado" required type="text" />
+              </label>
+              <label>
+                Marca/detalhe
+                <input id="consumable-details" placeholder="Ao leite, Harald..." type="text" />
+              </label>
+              <label>
+                Estoque atual
+                <input id="consumable-stock" inputmode="decimal" required type="text" />
+              </label>
+              <label>
+                Unidade
+                <select id="consumable-unit">
+                  <option value="g">g</option>
+                  <option value="kg">kg</option>
+                  <option value="ml">ml</option>
+                  <option value="l">l</option>
+                  <option value="un">un</option>
+                </select>
+              </label>
+              <label>
+                Alerta minimo
+                <input id="consumable-min-stock" inputmode="decimal" type="text" />
+              </label>
+              <label>
+                Unidade do alerta
+                <select id="consumable-min-stock-unit">
+                  <option value="g">g</option>
+                  <option value="kg">kg</option>
+                  <option value="ml">ml</option>
+                  <option value="l">l</option>
+                  <option value="un">un</option>
+                </select>
+              </label>
+              <label>
+                Valor da compra
+                <input id="consumable-cost" data-money-input inputmode="numeric" type="text" />
+              </label>
+              <button class="primary-action" type="submit">
+                <span data-icon="save"></span>
+                Salvar insumo
+              </button>
+            </form>
+            <div id="consumables-list" class="cards-grid"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Fabricacao</p>
+                <h2>Registrar producao</h2>
+              </div>
+              <span class="pill" id="production-recipe-status">Escolha um produto</span>
+            </div>
+            <form id="production-form" class="form-grid">
+              <label>
+                Produto pronto
+                <select id="production-product"></select>
+              </label>
+              <label>
+                Quantidade produzida
+                <input id="production-qty" min="1" step="1" type="number" value="1" />
+              </label>
+              <label class="wide">
+                Observacao
+                <input id="production-note" placeholder="Ex: lote da manha" type="text" />
+              </label>
+              <div class="wide" id="production-requirements"></div>
+              <button class="primary-action wide" type="submit">
+                <span data-icon="plus"></span>
+                Dar entrada na producao
+              </button>
+            </form>
+          </section>
+
+          <div class="dashboard-layout">
+            <section class="panel">
+              <div class="section-title">
+                <div>
+                  <p class="eyebrow">Comprar</p>
+                  <h2>Insumos faltando</h2>
+                </div>
+              </div>
+              <div id="consumable-alert-list" class="list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="section-title">
+                <div>
+                  <p class="eyebrow">Historico</p>
+                  <h2>Ultimas producoes</h2>
+                </div>
+              </div>
+              <div id="production-history-list" class="timeline"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="customers-view">
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Relacionamento</p>
+                <h2>Clientes</h2>
+              </div>
+            </div>
+            <form id="customer-form" class="form-grid">
+              <input id="customer-id" type="hidden" />
+              <label>
+                Nome
+                <input id="customer-name" required type="text" />
+              </label>
+              <label>
+                WhatsApp
+                <input id="customer-phone" placeholder="(00) 00000-0000" type="tel" />
+              </label>
+              <label class="wide">
+                Observacao
+                <input id="customer-note" placeholder="Preferencias, endereco, alergias..." type="text" />
+              </label>
+              <button class="primary-action" type="submit">
+                <span data-icon="save"></span>
+                Salvar cliente
+              </button>
+            </form>
+            <div id="customers-list" class="cards-grid"></div>
+          </section>
+        </section>
+
+        <section class="view" id="stock-view">
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Controle</p>
+                <h2>Estoque</h2>
+              </div>
+            </div>
+            <div id="stock-list" class="stock-list"></div>
+          </section>
+        </section>
+
+        <section class="view" id="reports-view">
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Filtros</p>
+                <h2>Periodo do relatorio</h2>
+              </div>
+              <span class="pill" id="report-period-label">Periodo personalizado</span>
+            </div>
+            <div class="form-grid report-filter-grid">
+              <label>
+                Inicio
+                <input id="report-start" type="datetime-local" />
+              </label>
+              <label>
+                Fim
+                <input id="report-end" type="datetime-local" />
+              </label>
+              <div class="quick-filters wide">
+                <button class="ghost-action" data-report-preset="today" type="button">Hoje</button>
+                <button class="ghost-action" data-report-preset="month" type="button">Mes atual</button>
+                <button class="ghost-action" data-report-preset="quarter" type="button">Trimestre</button>
+                <button class="ghost-action" data-report-preset="all" type="button">Tudo</button>
+              </div>
+            </div>
+          </section>
+
+          <div class="metrics-grid report-metrics">
+            <article class="metric">
+              <span data-icon="coins"></span>
+              <p>Faturamento</p>
+              <strong id="report-revenue-today">R$ 0,00</strong>
+            </article>
+            <article class="metric">
+              <span data-icon="shopping-bag"></span>
+              <p>Itens vendidos</p>
+              <strong id="report-items-today">0</strong>
+            </article>
+            <article class="metric">
+              <span data-icon="chart"></span>
+              <p>Lucro bruto</p>
+              <strong id="report-gross-profit">R$ 0,00</strong>
+            </article>
+            <article class="metric">
+              <span data-icon="heart-handshake"></span>
+              <p>Lucro liquido</p>
+              <strong id="report-net-profit">R$ 0,00</strong>
+            </article>
+          </div>
+
+          <div class="dashboard-layout">
+            <section class="panel">
+              <div class="section-title">
+                <div>
+                  <p class="eyebrow">Periodo</p>
+                  <h2>Resumo filtrado</h2>
+                </div>
+              </div>
+              <div id="weekly-report" class="list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="section-title">
+                <div>
+                  <p class="eyebrow">Clientes</p>
+                  <h2>Quem mais comprou</h2>
+                </div>
+              </div>
+              <div id="top-customers-report" class="list"></div>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Produtos</p>
+                <h2>Mais vendidos</h2>
+              </div>
+            </div>
+            <div id="top-products-report" class="cards-grid"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <div>
+                <p class="eyebrow">Vendas</p>
+                <h2>Historico do periodo</h2>
+              </div>
+            </div>
+            <div id="filtered-sales-report" class="timeline"></div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="edit-modal" hidden></div>
+    <div class="modal-backdrop" id="confirm-modal" hidden></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>

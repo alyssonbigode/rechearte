@@ -1,0 +1,9 @@
+{
+  "name": "Rechearte Controle",
+  "short_name": "Rechearte",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fff8ea",
+  "theme_color": "#6d3526",
+  "icons": []
+}

@@ -1,0 +1,29 @@
+services:
+  rechearte:
+    build: .
+    container_name: rechearte-controle
+    env_file:
+      - .env
+    ports:
+      - "${APP_PORT:-8088}:${PORT:-3000}"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: rechearte-db
+    env_file:
+      - .env
+    volumes:
+      - rechearte-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  rechearte-db-data:
