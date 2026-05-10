@@ -209,9 +209,14 @@ async function initDatabase() {
       production_id uuid not null references production_history(id) on delete cascade,
       consumable_id uuid references consumables(id) on delete set null,
       name text not null default '',
-      qty numeric(12, 3) not null default 0,
       unit text not null default 'g'
     );
+
+    create table if not exists state_version (
+      id int primary key default 1,
+      version int not null default 0
+    );
+    insert into state_version (id, version) values (1, 0) on conflict do nothing;
   `);
 
   await pool.query(`
@@ -252,6 +257,7 @@ async function getState() {
     recipeIngredientsResult,
     productionResult,
     productionConsumedResult,
+    versionResult,
   ] = await Promise.all([
     pool.query(`
       select id, name, category, price::float as price, cost_price::float as "costPrice", stock
@@ -305,6 +311,7 @@ async function getState() {
       from production_consumed
       order by id
     `),
+    pool.query(`select version from state_version where id = 1`),
   ]);
 
   const itemsBySale = new Map();
@@ -348,6 +355,7 @@ async function getState() {
   }
 
   return {
+    version: versionResult.rows[0]?.version || 0,
     products: productsResult.rows,
     customers: customersResult.rows,
     consumables: consumablesResult.rows,
@@ -379,6 +387,13 @@ async function saveState(state) {
   const recipeIds = new Set((state.recipeHistory || []).map((recipe) => recipe.id));
   try {
     await client.query("begin");
+
+    const versionResult = await client.query("select version from state_version where id = 1 for update");
+    const currentVersion = versionResult.rows[0]?.version || 0;
+    if (state.version !== undefined && state.version !== currentVersion) {
+      throw new Error("CONCURRENCY_ERROR");
+    }
+
     await client.query("delete from production_consumed");
     await client.query("delete from production_history");
     await client.query("delete from sale_items");
@@ -546,6 +561,7 @@ async function saveState(state) {
       }
     }
 
+    await client.query("update state_version set version = version + 1 where id = 1");
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");
@@ -566,6 +582,23 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  const user = process.env.ADMIN_USER;
+  const pass = process.env.ADMIN_PASS;
+  if (user && pass) {
+    const authHeader = request.headers.authorization;
+    if (!authHeader) {
+      response.setHeader("WWW-Authenticate", 'Basic realm="Rechearte"');
+      send(response, 401, "text/plain", "Nao autorizado");
+      return;
+    }
+    const [type, credentials] = authHeader.split(" ");
+    if (type !== "Basic" || Buffer.from(credentials, "base64").toString() !== `${user}:${pass}`) {
+      response.setHeader("WWW-Authenticate", 'Basic realm="Rechearte"');
+      send(response, 401, "text/plain", "Credenciais invalidas");
+      return;
+    }
+  }
+
   if (request.url === "/api/state" && request.method === "GET") {
     try {
       sendJson(response, 200, await getState());
@@ -580,8 +613,12 @@ const server = http.createServer(async (request, response) => {
       const parsed = JSON.parse(await readBody(request));
       await saveState(parsed);
       sendJson(response, 200, { ok: true });
-    } catch {
-      sendJson(response, 400, { ok: false, error: "Falha ao salvar os dados" });
+    } catch (err) {
+      if (err.message === "CONCURRENCY_ERROR") {
+        sendJson(response, 409, { ok: false, error: "Versao conflituosa" });
+      } else {
+        sendJson(response, 400, { ok: false, error: "Falha ao salvar os dados" });
+      }
     }
     return;
   }

@@ -82,9 +82,26 @@ function persistState() {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(state),
-  }).catch(() => {
-    showToast("Dados salvos neste aparelho. Servidor indisponivel.");
-  });
+  })
+    .then(async (response) => {
+      if (response.status === 409) {
+        showToast("Dados modificados em outro dispositivo. Recarregando para evitar conflito...");
+        setTimeout(() => window.location.reload(), 2000);
+        return;
+      }
+      if (!response.ok) {
+        showToast("Falha ao salvar no servidor.");
+        return;
+      }
+      // Se salvou com sucesso, incrementamos a versao local para a proxima edicao ser valida
+      if (state.version !== undefined) {
+        state.version += 1;
+        lastSavedState.version = state.version;
+      }
+    })
+    .catch(() => {
+      showToast("Dados salvos neste aparelho. Servidor indisponivel.");
+    });
 }
 
 function saveState() {
