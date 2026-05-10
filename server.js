@@ -73,6 +73,14 @@ function sendJson(response, status, body) {
   send(response, status, mime[".json"], JSON.stringify(body));
 }
 
+function redirect(response, location) {
+  response.writeHead(302, {
+    Location: location,
+    "Cache-Control": "no-store",
+  });
+  response.end();
+}
+
 function parseCookies(header = "") {
   return Object.fromEntries(
     header
@@ -159,7 +167,7 @@ function isAuthenticated(request) {
 
 function safeStaticPath(url) {
   const pathname = decodeURIComponent(new URL(url, "http://localhost").pathname);
-  const requested = pathname === "/" ? "/index.html" : pathname;
+  const requested = pathname === "/" ? "/index.html" : pathname === "/login" ? "/login.html" : pathname;
   const resolved = path.normalize(path.join(root, requested));
   return resolved.startsWith(root) ? resolved : null;
 }
@@ -659,7 +667,9 @@ async function saveState(state) {
 }
 
 const server = http.createServer(async (request, response) => {
-  if (request.url === "/api/health" && request.method === "GET") {
+  const { pathname } = new URL(request.url, "http://localhost");
+
+  if (pathname === "/api/health" && request.method === "GET") {
     try {
       await pool.query("select 1");
       sendJson(response, 200, { ok: true });
@@ -669,7 +679,7 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  if (request.url === "/api/session" && request.method === "GET") {
+  if (pathname === "/api/session" && request.method === "GET") {
     sendJson(response, 200, {
       authenticated: isAuthenticated(request),
       authEnabled: hasAdminCredentials(),
@@ -677,7 +687,7 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  if (request.url === "/api/session" && request.method === "POST") {
+  if (pathname === "/api/session" && request.method === "POST") {
     if (!hasAdminCredentials()) {
       sendJson(response, 200, { ok: true, authenticated: true });
       return;
@@ -700,7 +710,7 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  if (request.url === "/api/session" && request.method === "DELETE") {
+  if (pathname === "/api/session" && request.method === "DELETE") {
     const token = parseCookies(request.headers.cookie)[SESSION_COOKIE];
     if (token) sessions.delete(token);
     clearSession(response);
@@ -708,12 +718,20 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  if (request.url.startsWith("/api/") && !isAuthenticated(request)) {
+  if (pathname === "/logout") {
+    const token = parseCookies(request.headers.cookie)[SESSION_COOKIE];
+    if (token) sessions.delete(token);
+    clearSession(response);
+    redirect(response, "/login?message=Sessao%20encerrada.");
+    return;
+  }
+
+  if (pathname.startsWith("/api/") && !isAuthenticated(request)) {
     sendJson(response, 401, { ok: false, error: "Nao autenticado" });
     return;
   }
 
-  if (request.url === "/api/state" && request.method === "GET") {
+  if (pathname === "/api/state" && request.method === "GET") {
     try {
       sendJson(response, 200, await getState());
     } catch {
@@ -722,7 +740,7 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  if (request.url === "/api/state" && request.method === "PUT") {
+  if (pathname === "/api/state" && request.method === "PUT") {
     try {
       const parsed = JSON.parse(await readBody(request));
       await saveState(parsed);
@@ -734,6 +752,16 @@ const server = http.createServer(async (request, response) => {
         sendJson(response, 400, { ok: false, error: "Falha ao salvar os dados" });
       }
     }
+    return;
+  }
+
+  if ((pathname === "/" || pathname === "/index.html") && !isAuthenticated(request)) {
+    redirect(response, "/login");
+    return;
+  }
+
+  if ((pathname === "/login" || pathname === "/login.html") && isAuthenticated(request)) {
+    redirect(response, "/");
     return;
   }
 

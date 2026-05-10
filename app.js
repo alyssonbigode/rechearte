@@ -77,27 +77,13 @@ async function loadSession() {
 }
 
 function showLogin(message = "") {
-  byId("app-shell").hidden = true;
-  byId("login-screen").hidden = false;
-  byId("login-error").textContent = message;
-  byId("login-password").value = "";
-  byId("login-user").focus();
+  const url = new URL("/login", window.location.origin);
+  if (message) url.searchParams.set("message", message);
+  window.location.replace(url);
 }
 
 function showApp() {
-  byId("login-screen").hidden = true;
   byId("app-shell").hidden = false;
-}
-
-function resetAppSession(message = "") {
-  state = structuredClone(seed);
-  lastSavedState = structuredClone(seed);
-  saleDraftItems = [];
-  undoStack.length = 0;
-  activeRecipeId = null;
-  recipeDirty = false;
-  recipeIngredientRows = [blankRecipeRow()];
-  showLogin(message);
 }
 
 async function startApp() {
@@ -122,16 +108,7 @@ async function startApp() {
 }
 
 async function logout() {
-  resetAppSession("Sessao encerrada.");
-  try {
-    await fetch(SESSION_URL, {
-      method: "DELETE",
-      credentials: "same-origin",
-      keepalive: true,
-    });
-  } catch {
-    byId("login-error").textContent = "Sessao encerrada nesta tela. Recarregue se precisar validar o servidor.";
-  }
+  window.location.assign("/logout");
 }
 
 function normalizeState(nextState) {
@@ -2103,35 +2080,5 @@ byId("edit-modal").addEventListener("submit", (event) => {
 byId("undo-change").addEventListener("click", undoLastChange);
 
 byId("logout-button").addEventListener("click", logout);
-
-byId("login-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const submitButton = event.target.querySelector("button[type='submit']");
-  submitButton.disabled = true;
-  byId("login-error").textContent = "";
-
-  try {
-    const response = await fetch(SESSION_URL, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user: byId("login-user").value.trim(),
-        password: byId("login-password").value,
-      }),
-    });
-
-    if (!response.ok) {
-      showLogin("Usuario ou senha invalidos.");
-      return;
-    }
-
-    await startApp();
-  } catch {
-    byId("login-error").textContent = "Nao foi possivel entrar agora.";
-  } finally {
-    submitButton.disabled = false;
-  }
-});
 
 await startApp();

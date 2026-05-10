@@ -37,6 +37,14 @@ button {
   cursor: pointer;
 }
 
+a {
+  color: inherit;
+}
+
+.logout-link {
+  text-decoration: none;
+}
+
 button:disabled {
   cursor: wait;
   opacity: 0.65;
