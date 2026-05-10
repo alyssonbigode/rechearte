@@ -12,8 +12,13 @@ jobs:
       - name: Baixar Código Mais Recente
         uses: actions/checkout@v4
 
-      - name: Copiar arquivo .env do Servidor
-        run: cp /opt/github/.env .
+      - name: Configurar Login de Admin no Servidor
+        run: |
+          if ! grep -q "ADMIN_USER" /opt/github/.env; then
+            echo "ADMIN_USER=admin" | sudo tee -a /opt/github/.env
+            echo "ADMIN_PASS=rechearte123" | sudo tee -a /opt/github/.env
+          fi
+          cp /opt/github/.env .
 
       - name: Subir Aplicação com Docker
         # Adicionado 'sudo' para dar permissão de acessar o Docker
