@@ -36,8 +36,15 @@ form.addEventListener("submit", async (event) => {
     });
 
     if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
       passwordInput.value = "";
-      errorMessage.textContent = "Usuario ou senha invalidos.";
+      if (response.status === 429) {
+        errorMessage.textContent = result.error || "Muitas tentativas. Tente novamente em alguns minutos.";
+      } else if (result.attemptsRemaining !== undefined) {
+        errorMessage.textContent = `Usuario ou senha invalidos. Restam ${result.attemptsRemaining} tentativa(s).`;
+      } else {
+        errorMessage.textContent = "Usuario ou senha invalidos.";
+      }
       passwordInput.focus();
       return;
     }

@@ -9,8 +9,11 @@ const { Pool } = require("pg");
 const root = __dirname;
 const port = process.env.PORT || 3000;
 const sessions = new Map();
+const loginAttempts = new Map();
 const SESSION_COOKIE = "rechearte_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_BLOCK_MS = 1000 * 60 * 30;
 
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -65,6 +68,11 @@ function send(response, status, type, body) {
   response.writeHead(status, {
     "Content-Type": type,
     "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Referrer-Policy": "same-origin",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
   });
   response.end(body);
 }
@@ -77,8 +85,52 @@ function redirect(response, location) {
   response.writeHead(302, {
     Location: location,
     "Cache-Control": "no-store",
+    "Referrer-Policy": "same-origin",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
   });
   response.end();
+}
+
+function requestIp(request) {
+  const forwardedFor = request.headers["x-forwarded-for"];
+  if (forwardedFor) return String(forwardedFor).split(",")[0].trim();
+  return request.socket.remoteAddress || "unknown";
+}
+
+function isSecureRequest(request) {
+  return process.env.NODE_ENV === "production" || request.headers["x-forwarded-proto"] === "https";
+}
+
+function cleanLoginAttempts() {
+  const now = Date.now();
+  for (const [ip, attempt] of loginAttempts.entries()) {
+    if (attempt.blockedUntil && attempt.blockedUntil <= now) loginAttempts.delete(ip);
+  }
+}
+
+function loginBlock(ip) {
+  cleanLoginAttempts();
+  const attempt = loginAttempts.get(ip);
+  if (!attempt?.blockedUntil || attempt.blockedUntil <= Date.now()) return null;
+  return {
+    remainingMs: attempt.blockedUntil - Date.now(),
+  };
+}
+
+function registerFailedLogin(ip) {
+  cleanLoginAttempts();
+  const attempt = loginAttempts.get(ip) || { count: 0, blockedUntil: 0 };
+  attempt.count += 1;
+  if (attempt.count >= LOGIN_MAX_ATTEMPTS) {
+    attempt.blockedUntil = Date.now() + LOGIN_BLOCK_MS;
+  }
+  loginAttempts.set(ip, attempt);
+  return attempt;
+}
+
+function clearFailedLogins(ip) {
+  loginAttempts.delete(ip);
 }
 
 function parseCookies(header = "") {
@@ -129,17 +181,17 @@ function hasAdminCredentials() {
   return Boolean(process.env.ADMIN_USER && process.env.ADMIN_PASS);
 }
 
-function clearSession(response) {
+function clearSession(response, request) {
   response.setHeader("Set-Cookie", cookie(SESSION_COOKIE, "", {
     path: "/",
     maxAge: 0,
     httpOnly: true,
     sameSite: "Lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecureRequest(request),
   }));
 }
 
-function createSession(response, user) {
+function createSession(response, request, user) {
   const token = crypto.randomBytes(32).toString("base64url");
   sessions.set(token, {
     user,
@@ -150,7 +202,7 @@ function createSession(response, user) {
     maxAge: SESSION_TTL_MS / 1000,
     httpOnly: true,
     sameSite: "Lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecureRequest(request),
   }));
 }
 
@@ -693,16 +745,45 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    const ip = requestIp(request);
+    const block = loginBlock(ip);
+    if (block) {
+      response.setHeader("Retry-After", String(Math.ceil(block.remainingMs / 1000)));
+      sendJson(response, 429, {
+        ok: false,
+        error: "Muitas tentativas. Tente novamente em alguns minutos.",
+        blocked: true,
+        retryAfterSeconds: Math.ceil(block.remainingMs / 1000),
+      });
+      return;
+    }
+
     try {
       const body = JSON.parse(await readBody(request));
       const validUser = timingSafeEqualText(body.user || "", process.env.ADMIN_USER);
       const validPass = timingSafeEqualText(body.password || "", process.env.ADMIN_PASS);
       if (!validUser || !validPass) {
-        clearSession(response);
-        sendJson(response, 401, { ok: false, error: "Credenciais invalidas" });
+        const attempt = registerFailedLogin(ip);
+        clearSession(response, request);
+        if (attempt.blockedUntil && attempt.blockedUntil > Date.now()) {
+          response.setHeader("Retry-After", String(Math.ceil((attempt.blockedUntil - Date.now()) / 1000)));
+          sendJson(response, 429, {
+            ok: false,
+            error: "Muitas tentativas. Tente novamente em 30 minutos.",
+            blocked: true,
+            retryAfterSeconds: Math.ceil((attempt.blockedUntil - Date.now()) / 1000),
+          });
+          return;
+        }
+        sendJson(response, 401, {
+          ok: false,
+          error: "Credenciais invalidas",
+          attemptsRemaining: Math.max(0, LOGIN_MAX_ATTEMPTS - attempt.count),
+        });
         return;
       }
-      createSession(response, process.env.ADMIN_USER);
+      clearFailedLogins(ip);
+      createSession(response, request, process.env.ADMIN_USER);
       sendJson(response, 200, { ok: true, authenticated: true });
     } catch {
       sendJson(response, 400, { ok: false, error: "Formato invalido" });
@@ -713,7 +794,7 @@ const server = http.createServer(async (request, response) => {
   if (pathname === "/api/session" && request.method === "DELETE") {
     const token = parseCookies(request.headers.cookie)[SESSION_COOKIE];
     if (token) sessions.delete(token);
-    clearSession(response);
+    clearSession(response, request);
     sendJson(response, 200, { ok: true });
     return;
   }
@@ -721,7 +802,7 @@ const server = http.createServer(async (request, response) => {
   if (pathname === "/logout") {
     const token = parseCookies(request.headers.cookie)[SESSION_COOKIE];
     if (token) sessions.delete(token);
-    clearSession(response);
+    clearSession(response, request);
     redirect(response, "/login?message=Sessao%20encerrada.");
     return;
   }
