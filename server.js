@@ -8,6 +8,9 @@ const { Pool } = require("pg");
 
 const root = __dirname;
 const port = process.env.PORT || 3000;
+const sessions = new Map();
+const SESSION_COOKIE = "rechearte_session";
+const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -68,6 +71,90 @@ function send(response, status, type, body) {
 
 function sendJson(response, status, body) {
   send(response, status, mime[".json"], JSON.stringify(body));
+}
+
+function parseCookies(header = "") {
+  return Object.fromEntries(
+    header
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const index = part.indexOf("=");
+        if (index === -1) return [part, ""];
+        return [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
+      }),
+  );
+}
+
+function cookie(name, value, options = {}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`];
+  if (options.maxAge !== undefined) parts.push(`Max-Age=${options.maxAge}`);
+  if (options.httpOnly) parts.push("HttpOnly");
+  if (options.sameSite) parts.push(`SameSite=${options.sameSite}`);
+  if (options.path) parts.push(`Path=${options.path}`);
+  if (options.secure) parts.push("Secure");
+  return parts.join("; ");
+}
+
+function cleanSessions() {
+  const now = Date.now();
+  for (const [token, session] of sessions.entries()) {
+    if (session.expiresAt <= now) sessions.delete(token);
+  }
+}
+
+function getSession(request) {
+  cleanSessions();
+  const token = parseCookies(request.headers.cookie)[SESSION_COOKIE];
+  if (!token) return null;
+  const session = sessions.get(token);
+  if (!session || session.expiresAt <= Date.now()) {
+    sessions.delete(token);
+    return null;
+  }
+  session.expiresAt = Date.now() + SESSION_TTL_MS;
+  return session;
+}
+
+function hasAdminCredentials() {
+  return Boolean(process.env.ADMIN_USER && process.env.ADMIN_PASS);
+}
+
+function clearSession(response) {
+  response.setHeader("Set-Cookie", cookie(SESSION_COOKIE, "", {
+    path: "/",
+    maxAge: 0,
+    httpOnly: true,
+    sameSite: "Lax",
+    secure: process.env.NODE_ENV === "production",
+  }));
+}
+
+function createSession(response, user) {
+  const token = crypto.randomBytes(32).toString("base64url");
+  sessions.set(token, {
+    user,
+    expiresAt: Date.now() + SESSION_TTL_MS,
+  });
+  response.setHeader("Set-Cookie", cookie(SESSION_COOKIE, token, {
+    path: "/",
+    maxAge: SESSION_TTL_MS / 1000,
+    httpOnly: true,
+    sameSite: "Lax",
+    secure: process.env.NODE_ENV === "production",
+  }));
+}
+
+function timingSafeEqualText(left, right) {
+  const leftBuffer = Buffer.from(String(left));
+  const rightBuffer = Buffer.from(String(right));
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function isAuthenticated(request) {
+  return !hasAdminCredentials() || Boolean(getSession(request));
 }
 
 function safeStaticPath(url) {
@@ -582,21 +669,48 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  const user = process.env.ADMIN_USER;
-  const pass = process.env.ADMIN_PASS;
-  if (user && pass) {
-    const authHeader = request.headers.authorization;
-    if (!authHeader) {
-      response.setHeader("WWW-Authenticate", 'Basic realm="Rechearte"');
-      send(response, 401, "text/plain", "Nao autorizado");
+  if (request.url === "/api/session" && request.method === "GET") {
+    sendJson(response, 200, {
+      authenticated: isAuthenticated(request),
+      authEnabled: hasAdminCredentials(),
+    });
+    return;
+  }
+
+  if (request.url === "/api/session" && request.method === "POST") {
+    if (!hasAdminCredentials()) {
+      sendJson(response, 200, { ok: true, authenticated: true });
       return;
     }
-    const [type, credentials] = authHeader.split(" ");
-    if (type !== "Basic" || Buffer.from(credentials, "base64").toString() !== `${user}:${pass}`) {
-      response.setHeader("WWW-Authenticate", 'Basic realm="Rechearte"');
-      send(response, 401, "text/plain", "Credenciais invalidas");
-      return;
+
+    try {
+      const body = JSON.parse(await readBody(request));
+      const validUser = timingSafeEqualText(body.user || "", process.env.ADMIN_USER);
+      const validPass = timingSafeEqualText(body.password || "", process.env.ADMIN_PASS);
+      if (!validUser || !validPass) {
+        clearSession(response);
+        sendJson(response, 401, { ok: false, error: "Credenciais invalidas" });
+        return;
+      }
+      createSession(response, process.env.ADMIN_USER);
+      sendJson(response, 200, { ok: true, authenticated: true });
+    } catch {
+      sendJson(response, 400, { ok: false, error: "Formato invalido" });
     }
+    return;
+  }
+
+  if (request.url === "/api/session" && request.method === "DELETE") {
+    const token = parseCookies(request.headers.cookie)[SESSION_COOKIE];
+    if (token) sessions.delete(token);
+    clearSession(response);
+    sendJson(response, 200, { ok: true });
+    return;
+  }
+
+  if (request.url.startsWith("/api/") && !isAuthenticated(request)) {
+    sendJson(response, 401, { ok: false, error: "Nao autenticado" });
+    return;
   }
 
   if (request.url === "/api/state" && request.method === "GET") {

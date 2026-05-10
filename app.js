@@ -1,5 +1,6 @@
 const STORAGE_KEY = "rechearte-alpha-state";
 const API_URL = "/api/state";
+const SESSION_URL = "/api/session";
 
 const icons = {
   home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m3 10 9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>',
@@ -55,11 +56,57 @@ const units = ["g", "kg", "ml", "l", "un"];
 async function loadState() {
   try {
     const response = await fetch(API_URL);
+    if (response.status === 401) throw new Error("AUTH_REQUIRED");
     if (!response.ok) throw new Error("API indisponivel");
     return normalizeState(await response.json());
-  } catch {
+  } catch (error) {
+    if (error.message === "AUTH_REQUIRED") throw error;
     const saved = localStorage.getItem(STORAGE_KEY);
     return normalizeState(saved ? JSON.parse(saved) : structuredClone(seed));
+  }
+}
+
+async function loadSession() {
+  try {
+    const response = await fetch(SESSION_URL);
+    if (!response.ok) return { authenticated: false, authEnabled: true };
+    return response.json();
+  } catch {
+    return { authenticated: false, authEnabled: true };
+  }
+}
+
+function showLogin(message = "") {
+  byId("app-shell").hidden = true;
+  byId("login-screen").hidden = false;
+  byId("login-error").textContent = message;
+  byId("login-password").value = "";
+  byId("login-user").focus();
+}
+
+function showApp() {
+  byId("login-screen").hidden = true;
+  byId("app-shell").hidden = false;
+}
+
+async function startApp() {
+  const session = await loadSession();
+  if (!session.authenticated) {
+    showLogin();
+    return;
+  }
+
+  try {
+    state = await loadState();
+    lastSavedState = structuredClone(state);
+    renderAll();
+    showApp();
+  } catch (error) {
+    if (error.message === "AUTH_REQUIRED") {
+      showLogin();
+      return;
+    }
+    showLogin("Nao foi possivel carregar o sistema agora.");
   }
 }
 
@@ -90,6 +137,10 @@ function persistState() {
         return;
       }
       if (!response.ok) {
+        if (response.status === 401) {
+          showLogin("Sua sessao expirou. Entre novamente.");
+          return;
+        }
         showToast("Falha ao salvar no servidor.");
         return;
       }
@@ -2018,6 +2069,42 @@ byId("edit-modal").addEventListener("submit", (event) => {
 
 byId("undo-change").addEventListener("click", undoLastChange);
 
-state = await loadState();
-lastSavedState = structuredClone(state);
-renderAll();
+byId("logout-button").addEventListener("click", async () => {
+  await fetch(SESSION_URL, { method: "DELETE" });
+  state = structuredClone(seed);
+  lastSavedState = structuredClone(seed);
+  saleDraftItems = [];
+  undoStack.length = 0;
+  showLogin("Sessao encerrada.");
+});
+
+byId("login-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const submitButton = event.target.querySelector("button[type='submit']");
+  submitButton.disabled = true;
+  byId("login-error").textContent = "";
+
+  try {
+    const response = await fetch(SESSION_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user: byId("login-user").value.trim(),
+        password: byId("login-password").value,
+      }),
+    });
+
+    if (!response.ok) {
+      showLogin("Usuario ou senha invalidos.");
+      return;
+    }
+
+    await startApp();
+  } catch {
+    byId("login-error").textContent = "Nao foi possivel entrar agora.";
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+await startApp();

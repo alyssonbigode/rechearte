@@ -9,7 +9,27 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <section class="login-screen" id="login-screen" hidden>
+      <div class="login-panel">
+        <img class="login-logo" src="./assets/logo.jpeg" alt="Logo Rechearte" />
+        <p class="eyebrow">Acesso restrito</p>
+        <h1>Rechearte</h1>
+        <form class="login-form" id="login-form">
+          <label>
+            Usuario
+            <input id="login-user" autocomplete="username" required type="text" />
+          </label>
+          <label>
+            Senha
+            <input id="login-password" autocomplete="current-password" required type="password" />
+          </label>
+          <button class="primary-action" type="submit">Entrar</button>
+          <p class="login-error" id="login-error" role="alert"></p>
+        </form>
+      </div>
+    </section>
+
+    <div class="app-shell" id="app-shell" hidden>
       <aside class="sidebar">
         <div class="brand">
           <img class="brand-logo" src="./assets/logo.jpeg" alt="Logo Rechearte" />
@@ -65,6 +85,7 @@
             <button class="icon-button" id="undo-change" title="Voltar uma alteracao" type="button">
               <span data-icon="undo"></span>
             </button>
+            <button class="ghost-action" id="logout-button" type="button">Sair</button>
           </div>
         </header>
 
