@@ -55,7 +55,7 @@ const units = ["g", "kg", "ml", "l", "un"];
 
 async function loadState() {
   try {
-    const response = await fetch(API_URL);
+    const response = await fetch(API_URL, { credentials: "same-origin" });
     if (response.status === 401) throw new Error("AUTH_REQUIRED");
     if (!response.ok) throw new Error("API indisponivel");
     return normalizeState(await response.json());
@@ -68,7 +68,7 @@ async function loadState() {
 
 async function loadSession() {
   try {
-    const response = await fetch(SESSION_URL);
+    const response = await fetch(SESSION_URL, { credentials: "same-origin" });
     if (!response.ok) return { authenticated: false, authEnabled: true };
     return response.json();
   } catch {
@@ -87,6 +87,17 @@ function showLogin(message = "") {
 function showApp() {
   byId("login-screen").hidden = true;
   byId("app-shell").hidden = false;
+}
+
+function resetAppSession(message = "") {
+  state = structuredClone(seed);
+  lastSavedState = structuredClone(seed);
+  saleDraftItems = [];
+  undoStack.length = 0;
+  activeRecipeId = null;
+  recipeDirty = false;
+  recipeIngredientRows = [blankRecipeRow()];
+  showLogin(message);
 }
 
 async function startApp() {
@@ -127,6 +138,7 @@ function persistState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   fetch(API_URL, {
     method: "PUT",
+    credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(state),
   })
@@ -2070,12 +2082,16 @@ byId("edit-modal").addEventListener("submit", (event) => {
 byId("undo-change").addEventListener("click", undoLastChange);
 
 byId("logout-button").addEventListener("click", async () => {
-  await fetch(SESSION_URL, { method: "DELETE" });
-  state = structuredClone(seed);
-  lastSavedState = structuredClone(seed);
-  saleDraftItems = [];
-  undoStack.length = 0;
-  showLogin("Sessao encerrada.");
+  resetAppSession("Sessao encerrada.");
+  try {
+    await fetch(SESSION_URL, {
+      method: "DELETE",
+      credentials: "same-origin",
+      keepalive: true,
+    });
+  } catch {
+    byId("login-error").textContent = "Sessao encerrada nesta tela. Recarregue se precisar validar o servidor.";
+  }
 });
 
 byId("login-form").addEventListener("submit", async (event) => {
@@ -2087,6 +2103,7 @@ byId("login-form").addEventListener("submit", async (event) => {
   try {
     const response = await fetch(SESSION_URL, {
       method: "POST",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         user: byId("login-user").value.trim(),
