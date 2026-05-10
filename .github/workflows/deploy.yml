@@ -13,8 +13,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Copiar arquivo .env do Servidor
-        # Caminho atualizado baseado no print (agora esta em /opt/github/.env)
         run: cp /opt/github/.env .
 
       - name: Subir Aplicação com Docker
-        run: docker compose up -d --build rechearte
+        # Adicionado 'sudo' para dar permissão de acessar o Docker
+        run: sudo docker compose up -d --build rechearte
