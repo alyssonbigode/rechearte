@@ -121,6 +121,19 @@ async function startApp() {
   }
 }
 
+async function logout() {
+  resetAppSession("Sessao encerrada.");
+  try {
+    await fetch(SESSION_URL, {
+      method: "DELETE",
+      credentials: "same-origin",
+      keepalive: true,
+    });
+  } catch {
+    byId("login-error").textContent = "Sessao encerrada nesta tela. Recarregue se precisar validar o servidor.";
+  }
+}
+
 function normalizeState(nextState) {
   return {
     ...structuredClone(seed),
@@ -1803,6 +1816,14 @@ byId("production-form").addEventListener("submit", (event) => {
   showToast("Producao registrada e insumos baixados.");
 });
 
+document.addEventListener("click", (event) => {
+  const logoutButton = event.target.closest?.("[data-logout]");
+  if (!logoutButton) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  logout();
+}, { capture: true });
+
 document.addEventListener("click", async (event) => {
   const productEditId = event.target.dataset.editProduct;
   const productDeleteId = event.target.dataset.deleteProduct;
@@ -2081,18 +2102,7 @@ byId("edit-modal").addEventListener("submit", (event) => {
 
 byId("undo-change").addEventListener("click", undoLastChange);
 
-byId("logout-button").addEventListener("click", async () => {
-  resetAppSession("Sessao encerrada.");
-  try {
-    await fetch(SESSION_URL, {
-      method: "DELETE",
-      credentials: "same-origin",
-      keepalive: true,
-    });
-  } catch {
-    byId("login-error").textContent = "Sessao encerrada nesta tela. Recarregue se precisar validar o servidor.";
-  }
-});
+byId("logout-button").addEventListener("click", logout);
 
 byId("login-form").addEventListener("submit", async (event) => {
   event.preventDefault();
