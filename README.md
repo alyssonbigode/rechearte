@@ -1,8 +1,8 @@
 # Rechearte Controle
 
-Sistema web de vendas, estoque e precificação para a **Rechearte**, meu negócio de doces (cones e brigadeiros). Roda em Docker numa VM da Oracle Cloud, com deploy contínuo pelo GitHub Actions.
+Sistema web de vendas, estoque e precificação para a **Rechearte**, meu negócio de doces (cones e brigadeiros). Roda em Docker, com pipeline no GitHub Actions. Já rodou numa VM da Oracle Cloud com deploy contínuo por runner self-hosted.
 
-> Projeto pessoal. Versão atual: `0.1.0` (beta).
+> Projeto pessoal, pausado no momento. Versão atual: `0.1.0` (beta). A VM da OCI foi desativada; o deploy fica disponível de forma manual para quando houver um servidor de novo.
 
 <!-- Adicione aqui um print da tela principal: ![Tela principal](docs/tela-principal.png) -->
 
@@ -26,7 +26,7 @@ Sistema web de vendas, estoque e precificação para a **Rechearte**, meu negóc
 | Frontend | HTML, CSS e JavaScript puro |
 | Containers | Docker e Docker Compose |
 | CI/CD | GitHub Actions + runner self-hosted |
-| Hospedagem | VM na Oracle Cloud (OCI) |
+| Hospedagem | VM na Oracle Cloud (OCI), hoje desativada |
 
 ## Arquitetura e deploy
 
@@ -42,7 +42,7 @@ flowchart LR
 O workflow fica em [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) e tem dois jobs:
 
 1. **verificar** (runner do GitHub, roda também em pull requests): checa a sintaxe do JavaScript, valida o `docker-compose.yml` e faz o build da imagem.
-2. **deploy** (runner self-hosted na OCI, só na `main`): monta o `.env` a partir do servidor e dos *Secrets* do repositório, sobe o container com `docker compose up -d --build` e só termina com sucesso se `/api/health` responder. Esse endpoint também testa a conexão com o banco.
+2. **deploy** (runner self-hosted, na `main`, disparado manualmente enquanto não há servidor ativo): monta o `.env` a partir do servidor e dos *Secrets* do repositório, sobe o container com `docker compose up -d --build` e só termina com sucesso se `/api/health` responder. Esse endpoint também testa a conexão com o banco.
 
 Push que muda só documentação não dispara deploy.
 

@@ -1,7 +1,9 @@
 name: CI/CD Rechearte
 
-# Verifica o código em todo push e pull request; publica na VM da OCI só
-# quando o push chega na main. Mudança só de documentação não dispara nada.
+# Verifica o código em todo push e pull request. O deploy na VM da OCI é
+# manual (botão "Run workflow") enquanto não houver runner self-hosted ativo.
+# Para voltar ao deploy automático a cada push na main, troque a condição do
+# job "deploy" por: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 on:
   push:
     branches: [ main ]
@@ -47,7 +49,7 @@ jobs:
   deploy:
     name: Deploy na OCI
     needs: verificar
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     # Runner self-hosted instalado na VM da Oracle Cloud.
     runs-on: self-hosted
     env:
