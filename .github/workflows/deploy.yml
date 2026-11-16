@@ -1,25 +1,104 @@
-name: Deploy Rechearte to OCI
+name: CI/CD Rechearte
 
+# Verifica o código em todo push e pull request; publica na VM da OCI só
+# quando o push chega na main. Mudança só de documentação não dispara nada.
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+# Nunca dois deploys ao mesmo tempo.
+concurrency:
+  group: deploy-rechearte
+  cancel-in-progress: false
 
 jobs:
-  deploy:
-    runs-on: self-hosted
+  verificar:
+    name: Verificar código e imagem
+    runs-on: ubuntu-latest
     steps:
-      - name: Baixar Código Mais Recente
+      - name: Baixar o código
         uses: actions/checkout@v4
 
-      - name: Configurar Login de Admin no Servidor
-        run: |
-          if ! grep -q "ADMIN_USER" /opt/github/.env; then
-            echo "ADMIN_USER=admin" | sudo tee -a /opt/github/.env
-            echo "ADMIN_PASS=rechearte123" | sudo tee -a /opt/github/.env
-          fi
-          cp /opt/github/.env .
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
-      - name: Subir Aplicação com Docker
-        # Adicionado 'sudo' para dar permissão de acessar o Docker
-        run: sudo docker compose up -d --build rechearte
+      - name: Checar a sintaxe do JavaScript
+        run: |
+          node --check server.js
+          node --check app.js
+          node --check login.js
+
+      - name: Validar o docker-compose.yml
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+
+      - name: Build da imagem (sem publicar)
+        run: docker build -t rechearte-controle:ci .
+
+  deploy:
+    name: Deploy na OCI
+    needs: verificar
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # Runner self-hosted instalado na VM da Oracle Cloud.
+    runs-on: self-hosted
+    env:
+      ENV_FILE: /opt/github/.env
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Montar o .env a partir do servidor e dos Secrets
+        env:
+          # Configurados em Settings > Secrets and variables > Actions.
+          # Quando existem, substituem o login de admin do .env do servidor.
+          ADMIN_USER: ${{ secrets.ADMIN_USER }}
+          ADMIN_PASS: ${{ secrets.ADMIN_PASS }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${ADMIN_USER:-}" ] && [ -n "${ADMIN_PASS:-}" ]; then
+            echo "==> Atualizando o login de admin a partir dos Secrets"
+            sudo sed -i '/^ADMIN_USER=/d;/^ADMIN_PASS=/d' "$ENV_FILE"
+            printf 'ADMIN_USER=%s\nADMIN_PASS=%s\n' "$ADMIN_USER" "$ADMIN_PASS" | sudo tee -a "$ENV_FILE" > /dev/null
+          fi
+
+          if ! sudo grep -q '^ADMIN_PASS=' "$ENV_FILE"; then
+            echo "ERRO: ADMIN_PASS não está em $ENV_FILE nem nos Secrets do repositório."
+            exit 1
+          fi
+
+          sudo cp "$ENV_FILE" .env
+          sudo chown "$(id -u):$(id -g)" .env
+          chmod 600 .env
+
+      - name: Subir a aplicação com Docker Compose
+        run: |
+          set -euo pipefail
+          sudo docker compose up -d --build --remove-orphans rechearte
+          sudo docker image prune -f
+
+      - name: Health check
+        run: |
+          set -euo pipefail
+          PORTA=$(grep -E '^APP_PORT=' .env | cut -d= -f2 || true)
+          URL="http://localhost:${PORTA:-8088}/api/health"
+          for tentativa in $(seq 1 15); do
+            if curl -fsS "$URL" > /dev/null; then
+              echo "==> Aplicação respondendo em $URL"
+              exit 0
+            fi
+            echo "Aguardando a aplicação ($tentativa/15)..."
+            sleep 3
+          done
+          echo "ERRO: a aplicação não respondeu em $URL"
+          sudo docker compose logs --tail=50 rechearte
+          exit 1

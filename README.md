@@ -1,52 +1,79 @@
 # Rechearte Controle
 
-Primeira versao alfa de um controle simples de vendas para doces.
+Sistema web de vendas, estoque e precificação para a **Rechearte**, meu negócio de doces (cones e brigadeiros). Roda em Docker numa VM da Oracle Cloud, com deploy contínuo pelo GitHub Actions.
 
-## O que tem agora
+> Projeto pessoal. Versão atual: `0.1.0` (beta).
 
-- Dashboard com venda do dia, vendas do mes, clientes e alertas de estoque.
-- Cadastro de produtos com preco, estoque e minimo.
-- Cadastro de clientes com WhatsApp e observacoes.
-- Lancamento rapido de venda com baixa automatica no estoque.
-- Historico de vendas por cliente.
-- Backup e restauracao em JSON.
-- Layout responsivo para PC e celular.
-- Dados compartilhados em PostgreSQL dentro do Docker.
-- Configuracoes e senhas em `.env`.
+<!-- Adicione aqui um print da tela principal: ![Tela principal](docs/tela-principal.png) -->
 
-## Configurar senhas
+## Funcionalidades
 
-Antes de publicar fora da sua rede, edite o arquivo `.env` e troque:
+- **Painel** com vendas do dia e do mês, clientes e alertas de estoque baixo.
+- **Produtos** com preço, estoque e estoque mínimo.
+- **Clientes** com WhatsApp, observações e histórico de compras.
+- **Venda rápida** com baixa automática no estoque.
+- **Precificação:** cadastro de insumos e receitas, com cálculo do custo de cada produto.
+- **Backup e restauração** dos dados em JSON.
+- **Login** com sessão por cookie, comparação de senha em tempo constante e bloqueio de 30 min após 5 tentativas erradas.
+- Layout responsivo, pensado para usar no celular durante as vendas.
 
-```text
-DB_PASSWORD=troque_esta_senha_antes_de_publicar
-POSTGRES_PASSWORD=troque_esta_senha_antes_de_publicar
+## Stack
+
+| Camada | Tecnologia |
+| --- | --- |
+| Backend | Node.js 22 (módulo `http` nativo, sem framework) |
+| Banco de dados | PostgreSQL 16 |
+| Frontend | HTML, CSS e JavaScript puro |
+| Containers | Docker e Docker Compose |
+| CI/CD | GitHub Actions + runner self-hosted |
+| Hospedagem | VM na Oracle Cloud (OCI) |
+
+## Arquitetura e deploy
+
+```mermaid
+flowchart LR
+    dev[git push na main] --> ci[GitHub Actions<br/>verificar: sintaxe, compose, build]
+    ci --> runner[Runner self-hosted<br/>VM na OCI]
+    runner --> app[Container rechearte<br/>Node.js :3000]
+    app --> db[(PostgreSQL 16<br/>volume persistente)]
+    runner --> hc[Health check<br/>/api/health]
 ```
 
-Use a mesma senha nas duas variaveis.
+O workflow fica em [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) e tem dois jobs:
 
-## Rodar com Docker
+1. **verificar** (runner do GitHub, roda também em pull requests): checa a sintaxe do JavaScript, valida o `docker-compose.yml` e faz o build da imagem.
+2. **deploy** (runner self-hosted na OCI, só na `main`): monta o `.env` a partir do servidor e dos *Secrets* do repositório, sobe o container com `docker compose up -d --build` e só termina com sucesso se `/api/health` responder. Esse endpoint também testa a conexão com o banco.
+
+Push que muda só documentação não dispara deploy.
+
+## Rodar localmente
+
+Pré-requisitos: Docker e Docker Compose.
 
 ```bash
+cp .env.example .env    # edite as senhas
 docker compose up -d --build
 ```
 
-Depois acesse:
+Acesse em http://localhost:8088.
 
-```text
-http://localhost:8088
-```
+## Configuração
 
-Na rede local, acesse pelo IP do computador:
+Todas as configurações ficam no `.env`, que nunca vai para o Git. Modelo em [`.env.example`](.env.example).
 
-```text
-http://IP-DO-PC:8088
-```
+| Variável | Para que serve |
+| --- | --- |
+| `APP_PORT` / `PORT` | Porta publicada no host / porta interna do Node |
+| `DB_*` | Conexão da aplicação com o PostgreSQL |
+| `POSTGRES_*` | Criação do banco no container do PostgreSQL |
+| `ADMIN_USER` / `ADMIN_PASS` | Login do sistema |
 
-## Proximos passos bons para a beta
+Em produção, `ADMIN_USER` e `ADMIN_PASS` vêm dos *Secrets* do GitHub (Settings → Secrets and variables → Actions) e são aplicados no `.env` do servidor a cada deploy.
 
-- Login com senha.
+## Próximos passos
+
 - Cadastro de encomendas futuras.
-- Relatorio por periodo.
-- Impressao ou envio de recibo pelo WhatsApp.
-- Transformar em PWA instalavel com icones reais.
+- Relatório de vendas por período.
+- Envio de recibo pelo WhatsApp.
+- PWA instalável com ícones próprios.
+- Testes automatizados no pipeline.
